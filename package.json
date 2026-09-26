@@ -1,0 +1,13 @@
+{
+  "name": "nitrotype-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "sniff": "node bot.mjs --mode=sniff",
+    "run": "node bot.mjs --mode=run"
+  },
+  "dependencies": {
+    "playwright": "^1.47.0"
+  }
+}
