@@ -1,0 +1,33 @@
+{
+  "wpmRange": [
+    65,
+    80
+  ],
+  "accuracy": 0.96,
+  "startLag": [
+    350,
+    1400
+  ],
+  "thinkChance": 0.025,
+  "thinkMs": [
+    220,
+    850
+  ],
+  "betweenRaces": [
+    18000,
+    60000
+  ],
+  "skipRaceChance": 0.12,
+  "minTextLen": 80,
+  "maxTextLen": 900,
+  "keyDownUpMs": [
+    12,
+    32
+  ],
+  "useNitros": true,
+  "nitroChance": 0.6,
+  "nitroPctRange": [
+    0.15,
+    0.9
+  ]
+}

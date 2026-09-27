@@ -13,28 +13,73 @@
 import { chromium } from 'playwright';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import fs from 'fs';
+import http from 'http';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROFILE   = path.join(__dirname, 'profile');
+const SETTINGS_PATH = path.join(__dirname, 'settings.json');
 const MODE      = (process.argv.find(a => a.startsWith('--mode=')) || '--mode=run').split('=')[1];
+const UI_PORT   = 8765;
 
-// LEGIT-MODE defaults — under-radar tuning. Wins some, loses some, looks human.
-// If you want to grind harder, edit values below (and accept higher ban risk).
-const CFG = {
-  wpmRange:      [68, 92],    // competitive-human, sampled fresh each race
-  accuracy:      0.945,       // real strong typists: 94–97%
-  startLag:      [350, 1400], // human reaction time, wide variance
-  thinkChance:   0.025,       // mid-race pauses
+// Defaults — overridden by settings.json (edited via the web UI at localhost:8765)
+const DEFAULTS = {
+  wpmRange:      [68, 92],
+  accuracy:      0.945,
+  startLag:      [350, 1400],
+  thinkChance:   0.025,
   thinkMs:       [220, 850],
-  betweenRaces:  [12000, 45000], // long idle — nobody re-races in 5 seconds every time
-  skipRaceChance: 0.08,       // 8% of races: don't type; sit it out (looks like AFK)
+  betweenRaces:  [12000, 45000],
+  skipRaceChance: 0.08,
   minTextLen:    80,
   maxTextLen:    900,
-  keyDownUpMs:   [12, 32],    // slower key hold, more human
+  keyDownUpMs:   [12, 32],
   useNitros:     true,
-  nitroChance:   0.75,        // per available nitro: 75% chance we fire it this race
-  nitroPctRange: [0.15, 0.90],// nitros fire at random positions in this range (not fixed %s)
+  nitroChance:   0.75,
+  nitroPctRange: [0.15, 0.90],
 };
+
+let CFG = { ...DEFAULTS };
+function loadSettings() {
+  try {
+    if (fs.existsSync(SETTINGS_PATH)) {
+      const on_disk = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
+      CFG = { ...DEFAULTS, ...on_disk };
+    }
+  } catch (e) { console.error('[bot] settings load error:', e.message); }
+}
+loadSettings();
+
+function startUiServer() {
+  const server = http.createServer((req, res) => {
+    if (req.url === '/' || req.url === '/index.html') {
+      res.setHeader('Content-Type', 'text/html');
+      res.end(fs.readFileSync(path.join(__dirname, 'settings.html')));
+    } else if (req.url === '/api/settings' && req.method === 'GET') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(CFG));
+    } else if (req.url === '/api/settings' && req.method === 'POST') {
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', () => {
+        try {
+          const incoming = JSON.parse(body);
+          CFG = { ...DEFAULTS, ...incoming };
+          fs.writeFileSync(SETTINGS_PATH, JSON.stringify(CFG, null, 2));
+          console.log('[bot] settings updated via UI');
+          res.setHeader('Content-Type', 'application/json');
+          res.end('{"ok":true}');
+        } catch (e) {
+          res.statusCode = 400; res.end(e.message);
+        }
+      });
+    } else { res.statusCode = 404; res.end('not found'); }
+  });
+  server.listen(UI_PORT, '127.0.0.1', () => {
+    console.log(`[bot] settings UI at http://localhost:${UI_PORT}`);
+  });
+}
+startUiServer();
 
 const rand  = (a, b) => a + Math.random() * (b - a);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -262,6 +307,12 @@ async function main() {
   await page.evaluate(hookSrc).catch(() => {});
   // Reload once so the hook catches the WS at creation
   await page.goto('https://www.nitrotype.com/race').catch(() => {});
+
+  // Open settings UI in a new tab
+  try {
+    const settingsPage = await ctx.newPage();
+    await settingsPage.goto(`http://localhost:${UI_PORT}`);
+  } catch (e) { console.log('[bot] could not open settings tab:', e.message); }
 
   let currentText = null;
   let raceStatus  = null;
